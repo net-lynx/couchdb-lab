@@ -28,7 +28,7 @@
 						password: form.data.password
 					});
 					reset();
-					await goto(resolve('/home'));
+					await goto(resolve('/notes'));
 				})(),
 				{
 					loading: 'Logging in...',

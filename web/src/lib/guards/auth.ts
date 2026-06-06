@@ -36,7 +36,7 @@ export async function requireAuth() {
  *   return {};
  * };
  */
-export async function redirectIfAuthenticated(redirectTo: '/home' = '/home') {
+export async function redirectIfAuthenticated(redirectTo: '/notes' = '/notes') {
 	if (!browser) return;
 
 	await authStore.ensureInitialized();

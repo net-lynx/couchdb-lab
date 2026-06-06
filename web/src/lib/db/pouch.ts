@@ -18,6 +18,19 @@ function getDb(): PouchDB.Database {
 }
 
 /**
+ * PouchDB remote instance with cookieFetch baked into the constructor.
+ * PouchDB's HTTP adapter reads `fetch` from the DB options, not from
+ * per-operation options — passing it here is the reliable path.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getRemoteDb(): PouchDB.Database {
+	// `fetch` is a valid runtime option for pouchdb-browser's HTTP adapter
+	// but absent from the type definitions — suppress the any warning here.
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	return new PouchDB(REMOTE_URL, { fetch: cookieFetch } as any);
+}
+
+/**
  * Begin live, retrying sync to the remote using cookie auth. Idempotent —
  * if a live sync is already running this is a no-op.
  */
@@ -25,14 +38,7 @@ export function startSync(): void {
 	if (!browser) return;
 	if (syncHandler) return;
 
-	const d = getDb();
-	// `fetch` is supported at runtime by pouchdb-browser but missing from
-	// @types/pouchdb's per-operation option types, hence the cast.
-	syncHandler = d.sync(REMOTE_URL, {
-		live: true,
-		retry: true,
-		fetch: cookieFetch
-	} as PouchDB.Replication.SyncOptions);
+	syncHandler = getDb().sync(getRemoteDb(), { live: true, retry: true });
 
 	syncHandler.on('error', (err) => {
 		console.warn('[PouchDB] sync error', err);
@@ -47,12 +53,12 @@ export function stopSync(): void {
 	}
 }
 
+/** One-shot bidirectional sync — useful for manual "force sync" actions. */
 export function forceSync(): Promise<void> {
 	if (!browser) return Promise.resolve();
-	const d = getDb();
 	return new Promise((resolve, reject) => {
-		d.replicate
-			.to(REMOTE_URL, { fetch: cookieFetch } as PouchDB.Replication.ReplicateOptions)
+		getDb()
+			.sync(getRemoteDb())
 			.on('complete', () => resolve())
 			.on('error', reject);
 	});
