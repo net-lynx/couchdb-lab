@@ -5,15 +5,16 @@
 	import * as Field from '$lib/components/ui/field/index.js';
 	import { defaults, superForm } from 'sveltekit-superforms';
 	import { zod4 } from 'sveltekit-superforms/adapters';
-	import { loginSchema } from '../domain/schema';
+	import { registerSchema } from '../domain/schema';
+	import { registerUser } from '../data/register.api';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { authStore } from '$lib/stores/auth.svelte';
 
-	const form = superForm(defaults(zod4(loginSchema)), {
+	const form = superForm(defaults(zod4(registerSchema)), {
 		SPA: true,
-		validators: zod4(loginSchema),
+		validators: zod4(registerSchema),
 		resetForm: false,
 		onUpdate: async ({ form }) => {
 			if (!form.valid) {
@@ -21,8 +22,14 @@
 				return;
 			}
 
+			if (form.data.password !== form.data.confirmPassword) {
+				toast.error("Passwords don't match");
+				return;
+			}
+
 			await toast.promise(
 				(async () => {
+					await registerUser(form.data.username, form.data.password);
 					await authStore.login({
 						name: form.data.username,
 						password: form.data.password
@@ -31,9 +38,9 @@
 					await goto(resolve('/notes'));
 				})(),
 				{
-					loading: 'Logging in...',
-					success: 'Login successful!',
-					error: (err) => (err instanceof Error ? err.message : 'Login failed')
+					loading: 'Creating account...',
+					success: 'Account created successfully!',
+					error: (err) => (err instanceof Error ? err.message : 'Registration failed')
 				}
 			);
 		}
@@ -43,8 +50,8 @@
 
 <Card.Root class="mx-auto w-full max-w-sm">
 	<Card.Header>
-		<Card.Title class="text-2xl">Login</Card.Title>
-		<Card.Description>Enter your credentials to access your account</Card.Description>
+		<Card.Title class="text-2xl">Create Account</Card.Title>
+		<Card.Description>Fill in the details below to create your account</Card.Description>
 	</Card.Header>
 	<Card.Content>
 		<form method="POST" use:form.enhance>
@@ -72,13 +79,27 @@
 					</Form.Control>
 					<Form.FieldErrors />
 				</Form.Field>
-				<Form.Button disabled={$submitting}>Login</Form.Button>
+				<Form.Field {form} name="confirmPassword">
+					<Form.Control>
+						{#snippet children({ props })}
+							<Form.Label>Confirm Password</Form.Label>
+							<Input
+								{...props}
+								type="password"
+								bind:value={$formData.confirmPassword}
+								placeholder="Confirm your password"
+							/>
+						{/snippet}
+					</Form.Control>
+					<Form.FieldErrors />
+				</Form.Field>
+				<Form.Button disabled={$submitting}>Register</Form.Button>
 			</Field.FieldGroup>
 		</form>
 		<p class="mt-4 text-center text-sm text-muted-foreground">
-			Don't have an account?
-			<a href={resolve('/register')} class="underline underline-offset-4 hover:text-primary">
-				Register
+			Already have an account?
+			<a href={resolve('/login')} class="underline underline-offset-4 hover:text-primary">
+				Login
 			</a>
 		</p>
 	</Card.Content>

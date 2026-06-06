@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="th">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>CouchDB — 3 Authorization Patterns เจาะลึก</title>
+		<style>
+			:root {
+				--bg: #0f1117;
+				--panel: #171a23;
+				--panel-2: #1e222d;
+				--border: #2a2f3a;
+				--text: #e6e9ef;
+				--muted: #9aa3b2;
+				--accent: #5eead4;
+				--accent-2: #7dd3fc;
+				--accent-3: #c4b5fd;
+				--warn: #fbbf24;
+				--danger: #f87171;
+				--ok: #4ade80;
+				--radius: 12px;
+			}
+			* { box-sizing: border-box; }
+			html { scroll-behavior: smooth; }
+			body {
+				margin: 0;
+				background: var(--bg);
+				color: var(--text);
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans Thai',
+					Tahoma, sans-serif;
+				line-height: 1.7;
+			}
+			.layout { display: flex; max-width: 1400px; margin: 0 auto; }
+			nav {
+				position: sticky;
+				top: 0;
+				align-self: flex-start;
+				height: 100vh;
+				width: 270px;
+				flex-shrink: 0;
+				overflow-y: auto;
+				padding: 28px 18px;
+				border-right: 1px solid var(--border);
+				background: var(--panel);
+			}
+			nav h2 {
+				font-size: 13px;
+				text-transform: uppercase;
+				letter-spacing: 0.08em;
+				color: var(--muted);
+				margin: 0 0 14px;
+			}
+			nav a {
+				display: block;
+				color: var(--muted);
+				text-decoration: none;
+				padding: 7px 12px;
+				border-radius: 8px;
+				font-size: 14px;
+				transition: all 0.15s;
+			}
+			nav a:hover { color: var(--text); background: var(--panel-2); }
+			nav a.active { color: var(--accent); background: var(--panel-2); }
+			nav .sub { padding-left: 24px; font-size: 13px; }
+			nav .group { margin-top: 14px; }
+			main { flex: 1; min-width: 0; padding: 40px 48px 120px; }
+			header.hero { margin-bottom: 44px; }
+			header.hero h1 {
+				font-size: 32px;
+				margin: 0 0 10px;
+				background: linear-gradient(90deg, var(--accent), var(--accent-2));
+				-webkit-background-clip: text;
+				background-clip: text;
+				-webkit-text-fill-color: transparent;
+			}
+			header.hero p { color: var(--muted); font-size: 16px; margin: 0; }
+			section { margin-bottom: 56px; scroll-margin-top: 24px; }
+			section > h2 {
+				font-size: 24px;
+				margin: 0 0 6px;
+				padding-bottom: 10px;
+				border-bottom: 1px solid var(--border);
+			}
+			section h3 { font-size: 18px; margin: 28px 0 8px; color: var(--accent-2); }
+			section h4 { font-size: 15px; margin: 20px 0 6px; color: var(--accent-3); }
+			p { color: #cdd3df; }
+			code {
+				background: var(--panel-2);
+				padding: 2px 6px;
+				border-radius: 5px;
+				font-size: 0.88em;
+				color: var(--accent);
+				font-family: 'SF Mono', Consolas, monospace;
+			}
+			pre {
+				background: var(--panel-2);
+				border: 1px solid var(--border);
+				border-radius: var(--radius);
+				padding: 16px 18px;
+				overflow-x: auto;
+				font-size: 13.5px;
+				line-height: 1.6;
+			}
+			pre code { background: none; padding: 0; color: var(--text); }
+			table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+			th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+			th { color: var(--accent-2); font-weight: 600; }
+			td code { font-size: 0.85em; }
+			ul { padding-left: 22px; }
+			li { margin: 6px 0; color: #cdd3df; }
+			.pill {
+				display: inline-block;
+				font-size: 12px;
+				padding: 3px 10px;
+				border-radius: 999px;
+				border: 1px solid var(--border);
+				margin-right: 6px;
+			}
+			.pill.green { color: var(--ok); border-color: #2f5e3d; background: #122017; }
+			.pill.amber { color: var(--warn); border-color: #5e4a2f; background: #201a12; }
+			.pill.red { color: var(--danger); border-color: #5e2f2f; background: #201212; }
+			.proscons { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 18px 0; }
+			.proscons > div {
+				background: var(--panel);
+				border: 1px solid var(--border);
+				border-radius: var(--radius);
+				padding: 14px 18px;
+			}
+			.proscons h4 { margin-top: 0; }
+			.proscons .pros h4 { color: var(--ok); }
+			.proscons .cons h4 { color: var(--danger); }
+			.callout {
+				border-left: 3px solid var(--accent);
+				background: var(--panel);
+				padding: 14px 18px;
+				border-radius: 0 var(--radius) var(--radius) 0;
+				margin: 18px 0;
+			}
+			.callout.warn { border-color: var(--warn); }
+			.callout.danger { border-color: var(--danger); }
+			.callout.ok { border-color: var(--ok); }
+			.callout strong { color: var(--text); }
+			.diagram {
+				position: relative;
+				background: var(--panel);
+				border: 1px solid var(--border);
+				border-radius: var(--radius);
+				padding: 20px;
+				margin: 20px 0;
+			}
+			.diagram .bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+			.diagram .bar span { font-size: 13px; color: var(--muted); }
+			.diagram .zoom-btn {
+				display: inline-flex;
+				align-items: center;
+				gap: 6px;
+				background: var(--panel-2);
+				border: 1px solid var(--border);
+				color: var(--accent);
+				border-radius: 8px;
+				padding: 6px 12px;
+				font-size: 12.5px;
+				cursor: pointer;
+				transition: all 0.15s;
+			}
+			.diagram .zoom-btn:hover { background: #262b37; border-color: var(--accent); }
+			.diagram .mermaid { text-align: center; cursor: zoom-in; overflow-x: auto; }
+			.diagram .mermaid svg { max-width: 100%; height: auto; }
+			.viewer { position: fixed; inset: 0; background: rgba(8, 10, 14, 0.96); display: none; z-index: 1000; flex-direction: column; }
+			.viewer.open { display: flex; }
+			.viewer-bar { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--panel); }
+			.viewer-bar .title { font-size: 14px; color: var(--muted); }
+			.viewer-controls { display: flex; gap: 8px; }
+			.viewer-controls button {
+				background: var(--panel-2);
+				border: 1px solid var(--border);
+				color: var(--text);
+				width: 38px;
+				height: 38px;
+				border-radius: 8px;
+				font-size: 18px;
+				cursor: pointer;
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+			}
+			.viewer-controls button:hover { border-color: var(--accent); color: var(--accent); }
+			.viewer-stage { flex: 1; overflow: hidden; cursor: grab; display: flex; align-items: center; justify-content: center; touch-action: none; }
+			.viewer-stage.grabbing { cursor: grabbing; }
+			.viewer-stage svg { transform-origin: 0 0; will-change: transform; max-width: none !important; height: auto; }
+			.viewer-hint { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--border); border-radius: 20px; padding: 8px 18px; font-size: 12.5px; color: var(--muted); }
+			.crosslink { display: inline-block; margin-top: 8px; color: var(--accent-2); text-decoration: none; font-size: 14px; }
+			.crosslink:hover { text-decoration: underline; }
+			@media (max-width: 860px) {
+				nav { display: none; }
+				main { padding: 24px 18px 80px; }
+				.proscons { grid-template-columns: 1fr; }
+			}
+		</style>
+	</head>
+	<body>
+		<div class="layout">
+			<nav id="toc">
+				<h2>สารบัญ</h2>
+				<a href="#intro">บทนำ</a>
+				<a href="#decision">เลือก pattern ยังไง</a>
+				<div class="group">
+					<a href="#p1">Pattern 1 · DB-per-scope</a>
+					<a href="#p1-how" class="sub">ทำงานยังไง</a>
+					<a href="#p1-code" class="sub">code</a>
+					<a href="#p1-pc" class="sub">ข้อดี/ข้อเสีย</a>
+				</div>
+				<div class="group">
+					<a href="#p2">Pattern 2 · validate_doc</a>
+					<a href="#p2-how" class="sub">ทำงานยังไง</a>
+					<a href="#p2-code" class="sub">code</a>
+					<a href="#p2-read" class="sub">ปัญหา read</a>
+					<a href="#p2-pc" class="sub">ข้อดี/ข้อเสีย</a>
+				</div>
+				<div class="group">
+					<a href="#p3">Pattern 3 · Backend proxy</a>
+					<a href="#p3-how" class="sub">ทำงานยังไง</a>
+					<a href="#p3-code" class="sub">code</a>
+					<a href="#p3-pc" class="sub">ข้อดี/ข้อเสีย</a>
+				</div>
+				<a href="#compare">ตารางเทียบรวม</a>
+				<a href="#mix">ผสม pattern</a>
+			</nav>
+
+			<main>
+				<header class="hero">
+					<h1>CouchDB — 3 Authorization Patterns</h1>
+					<p>เจาะลึกแต่ละ pattern สำหรับ scope user เข้าถึงเฉพาะบาง database / document พร้อม code จริงและ trade-offs</p>
+				</header>
+
+				<section id="intro">
+					<h2>บทนำ</h2>
+					<p>
+						CouchDB มี authorization 2 ระดับ native: <strong>database-level</strong>
+						(ผ่าน <code>_security</code> doc) และ <strong>document-level</strong>
+						(ผ่าน <code>validate_doc_update</code> function) ถ้าต้องการละเอียดกว่านั้น
+						ต้องวาง backend proxy คั่น สามแนวทางนี้ไม่ได้แทนกันเสมอ —
+						มักผสมกันตามความต้องการจริง
+					</p>
+					<div class="callout">
+						<strong>คำถามหลักที่ต้องตอบก่อนเลือก:</strong> granularity ที่ต้องการคืออะไร?
+						(ทั้ง database / บาง document / บาง field) และ client sync ตรงกับ CouchDB
+						หรือผ่าน backend? ถ้า client sync ตรง (PouchDB ↔ CouchDB) → ถูกจำกัดที่ Pattern 1 + 2 เท่านั้น
+					</div>
+					<a class="crosslink" href="architecture.html">← กลับไปเอกสารสถาปัตยกรรมหลัก</a>
+				</section>
+
+				<section id="decision">
+					<h2>เลือก pattern ยังไง</h2>
+					<div class="diagram">
+						<div class="bar">
+							<span>รูปที่ 1 — Decision tree</span>
+							<button class="zoom-btn" data-zoom>🔍 ขยาย</button>
+						</div>
+						<div class="mermaid">
+flowchart TB
+    START{"ต้องการแยกสิทธิ์<br/>ระดับไหน?"}
+    START -->|ทั้ง database| P1["Pattern 1<br/>DB-per-scope + roles"]
+    START -->|บาง document<br/>ใน DB เดียว| Q2{"client sync<br/>ตรงกับ CouchDB?"}
+    START -->|บาง field /<br/>logic ซับซ้อน| P3["Pattern 3<br/>Backend proxy"]
+    Q2 -->|ใช่ PouchDB ↔ CouchDB| P2["Pattern 2<br/>validate_doc_update<br/>+ filtered replication"]
+    Q2 -->|ไม่ ผ่าน API อยู่แล้ว| P3
+    classDef p1 fill:#134e4a,stroke:#5eead4,color:#e6e9ef;
+    classDef p2 fill:#1e3a5f,stroke:#7dd3fc,color:#e6e9ef;
+    classDef p3 fill:#3b3052,stroke:#c4b5fd,color:#e6e9ef;
+    class P1 p1;
+    class P2 p2;
+    class P3 p3;
+						</div>
+					</div>
+				</section>
+
+				<!-- ============ PATTERN 1 ============ -->
+				<section id="p1">
+					<h2>Pattern 1 · Database-per-scope + Roles</h2>
+					<p>
+						<span class="pill green">enforce: CouchDB native</span>
+						<span class="pill green">granularity: database</span>
+						<span class="pill amber">setup: medium</span>
+					</p>
+					<p>
+						แต่ละ "หน่วยของสิทธิ์" = หนึ่ง database แยกกัน คุมการเข้าถึงด้วย
+						<code>roles</code> ใน <code>_security</code> doc ของ DB นั้น —
+						ไม่ใช้ <code>names</code> เพราะ names ต้องแก้ทุกครั้งที่เพิ่มคน ส่วน roles
+						แก้ที่ user document ที่เดียว
+					</p>
+
+					<h3 id="p1-how">ทำงานยังไง</h3>
+					<p>
+						CouchDB ตรวจตอนทุก request: เอา <code>userCtx.roles</code> มา intersect กับ
+						<code>members.roles</code> ของ DB ถ้ามีตัวร่วมอย่างน้อย 1 → ผ่าน ถ้าไม่มี → 403
+						(<code>_admin</code> ผ่านเสมอ)
+					</p>
+					<div class="diagram">
+						<div class="bar">
+							<span>รูปที่ 2 — Roles intersection check</span>
+							<button class="zoom-btn" data-zoom>🔍 ขยาย</button>
+						</div>
+						<div class="mermaid">
+sequenceDiagram
+    participant C as Client (PouchDB)
+    participant DB as CouchDB
+    C->>DB: GET /branch1_stock (cookie)
+    DB->>DB: userCtx.roles = ["branch1:stock"]
+    DB->>DB: members.roles = ["branch1:stock"]
+    DB->>DB: intersect ≠ ∅ ?
+    alt มีตัวร่วม
+        DB-->>C: 200 + docs
+    else ไม่มี
+        DB-->>C: 403 Forbidden
+    end
+						</div>
+					</div>
+
+					<h3 id="p1-code">Code</h3>
+					<h4>1. ตั้ง role ที่ user document</h4>
+					<pre><code>// PUT /_users/org.couchdb.user:nai_a
+{
+  "name": "nai_a",
+  "password": "...",
+  "roles": ["branch1:stock"],
+  "type": "user"
+}</code></pre>
+					<h4>2. ตั้ง _security ที่แต่ละ database</h4>
+					<pre><code>// PUT /branch1_stock/_security
+{
+  "admins":  { "names": [], "roles": ["branch1:manager"] },
+  "members": { "names": [], "roles": ["branch1:stock"] }
+}
+
+// PUT /branch1_bill/_security
+{
+  "admins":  { "names": [], "roles": ["branch1:manager"] },
+  "members": { "names": [], "roles": ["branch1:bill"] }
+}</code></pre>
+					<h4>3. Client sync ตรงได้เลย — ไม่ต้องเขียน auth logic</h4>
+					<pre><code>// นาย A เปิดได้เฉพาะ DB ที่ role ครอบคลุม
+const stock = new PouchDB('http://host:5984/branch1_stock', {
+  fetch: (url, opts) => fetch(url, { ...opts, credentials: 'include' })
+});
+stock.sync(localStock, { live: true, retry: true });
+// branch1_bill → 403 ตั้งแต่ handshake</code></pre>
+
+					<h3 id="p1-pc">ข้อดี / ข้อเสีย</h3>
+					<div class="proscons">
+						<div class="pros">
+							<h4>✅ ข้อดี</h4>
+							<ul>
+								<li>CouchDB enforce เอง ไม่ต้องเขียน code security</li>
+								<li>read + write ถูกกรองอัตโนมัติพร้อมกัน</li>
+								<li>per-database replication → sync เฉพาะ scope</li>
+								<li>DB พังตัวนึงไม่ลามตัวอื่น</li>
+							</ul>
+						</div>
+						<div class="cons">
+							<h4>❌ ข้อเสีย</h4>
+							<ul>
+								<li>DB เยอะถ้า branch × resource เยอะ (provision/monitor)</li>
+								<li>query ข้าม DB ทำไม่ได้ตรงๆ ต้องรวมที่ central</li>
+								<li>เพิ่ม branch ใหม่ = ต้อง provision DB ชุดใหม่</li>
+							</ul>
+						</div>
+					</div>
+					<div class="callout ok">
+						<strong>เหมาะกับ:</strong> ร้านอาหารหลายสาขา, multi-tenant ที่ tenant แยกข้อมูลชัด,
+						shelter management (1 DB ต่อ subsystem ต่อศูนย์) — กรณีที่ขอบเขตข้อมูลตรงกับขอบเขตสิทธิ์
+					</div>
+				</section>
+
+				<!-- ============ PATTERN 2 ============ -->
+				<section id="p2">
+					<h2>Pattern 2 · validate_doc_update (Document-level)</h2>
+					<p>
+						<span class="pill green">enforce: CouchDB native</span>
+						<span class="pill amber">granularity: document</span>
+						<span class="pill red">setup: complex</span>
+					</p>
+					<p>
+						DB เดียวเก็บข้อมูลหลาย scope ปนกัน ใช้ JavaScript function ใน design document
+						กรอง <strong>write</strong> ระดับ document — ทุกครั้งที่ write CouchDB เรียก function นี้
+						ถ้า <code>throw</code> = ปฏิเสธ
+					</p>
+
+					<h3 id="p2-how">ทำงานยังไง</h3>
+					<div class="diagram">
+						<div class="bar">
+							<span>รูปที่ 3 — validate_doc_update บน write path</span>
+							<button class="zoom-btn" data-zoom>🔍 ขยาย</button>
+						</div>
+						<div class="mermaid">
+flowchart TB
+    W["PUT /stock/{doc}<br/>branch_id: 2"]
+    W --> V{"validate_doc_update<br/>(newDoc, oldDoc, userCtx)"}
+    V -->|"required role อยู่ใน<br/>userCtx.roles"| OK["✓ save"]
+    V -->|"ไม่มี → throw forbidden"| NO["✗ 403"]
+    R["GET /stock/_all_docs"] --> RW["⚠ คืน ทุก doc<br/>ไม่ถูกกรองอัตโนมัติ"]
+    classDef ok fill:#134e4a,stroke:#5eead4,color:#e6e9ef;
+    classDef bad fill:#4a2c2c,stroke:#f87171,color:#e6e9ef;
+    class OK ok;
+    class NO,RW bad;
+						</div>
+					</div>
+
+					<h3 id="p2-code">Code</h3>
+					<pre><code>// PUT /stock/_design/access
+{
+  "_id": "_design/access",
+  "validate_doc_update": "function (newDoc, oldDoc, userCtx) {
+    if (userCtx.roles.indexOf('_admin') !== -1) return;       // admin ผ่าน
+    var branch = newDoc.branch_id;
+    if (!branch) throw({ forbidden: 'branch_id required' });
+    var required = 'branch' + branch + ':stock';
+    if (userCtx.roles.indexOf(required) === -1) {
+      throw({ forbidden: 'no access to branch ' + branch });
+    }
+    // กัน user ย้าย doc ข้าม branch
+    if (oldDoc &amp;&amp; oldDoc.branch_id !== newDoc.branch_id) {
+      throw({ forbidden: 'cannot move across branches' });
+    }
+  }"
+}</code></pre>
+
+					<h3 id="p2-read">ปัญหาสำคัญ — read ไม่ถูกกรอง</h3>
+					<p>
+						<code>validate_doc_update</code> คุมแค่ <strong>write</strong> การ read
+						(<code>_all_docs</code>, view) ยัง<strong>คืนทุก document</strong> ใน DB
+						ต้องแก้ด้วยอย่างใดอย่างหนึ่ง:
+					</p>
+					<ul>
+						<li><strong>Filtered replication</strong> — sync เฉพาะ doc ที่ตรง scope (กรองตอน sync ไม่ใช่ตอน enforce)</li>
+						<li><strong>ไม่กันคนตั้งใจ peek</strong> — filtered replication ป้องกัน data ที่ sync ลงเครื่อง แต่คนที่ query API ตรงยังเห็นได้ → ถ้าต้องการ read security จริงต้องไป Pattern 1 หรือ 3</li>
+					</ul>
+					<pre><code>// _design/app — filter function
+{
+  "filters": {
+    "by_branch": "function (doc, req) {
+      return doc.branch_id == req.query.branch_id;
+    }"
+  }
+}
+
+// client
+PouchDB.replicate(remote, local, {
+  filter: 'app/by_branch',
+  query_params: { branch_id: '1' }
+});</code></pre>
+					<div class="callout danger">
+						<strong>ระวัง:</strong> Pattern 2 ให้ <em>write</em> security จริง แต่
+						<em>read</em> security เป็นแค่ "ไม่ส่งมาให้" ไม่ใช่ "ห้ามเห็น" —
+						ถ้าข้อมูลอ่อนไหว (เช่น bill ข้ามสาขา) อย่าพึ่ง Pattern 2 อย่างเดียว
+					</div>
+
+					<h3 id="p2-pc">ข้อดี / ข้อเสีย</h3>
+					<div class="proscons">
+						<div class="pros">
+							<h4>✅ ข้อดี</h4>
+							<ul>
+								<li>DB เดียว — query/aggregate รวมง่าย</li>
+								<li>write rule ยืดหยุ่น (ตรวจ field, ความสัมพันธ์ doc)</li>
+								<li>ไม่ต้อง provision DB ต่อ scope</li>
+							</ul>
+						</div>
+						<div class="cons">
+							<h4>❌ ข้อเสีย</h4>
+							<ul>
+								<li>read ไม่ปลอดภัยโดยตัวมันเอง</li>
+								<li>function เขียน/debug ยาก (รันใน query server)</li>
+								<li>เปลี่ยน rule = ต้อง update design doc + อาจ rebuild</li>
+								<li>conflict ปนกันใน DB เดียวจัดการยากกว่า</li>
+							</ul>
+						</div>
+					</div>
+					<div class="callout ok">
+						<strong>เหมาะกับ:</strong> data ที่ scope ปนกันโดยธรรมชาติและ read ไม่ต้องลับมาก
+						เช่น activity log, audit trail, shared catalog ที่ทุกคนอ่านได้แต่เขียนเฉพาะของตัว
+					</div>
+				</section>
+
+				<!-- ============ PATTERN 3 ============ -->
+				<section id="p3">
+					<h2>Pattern 3 · Backend Proxy</h2>
+					<p>
+						<span class="pill red">enforce: backend code</span>
+						<span class="pill green">granularity: ไม่จำกัด</span>
+						<span class="pill red">setup: complex</span>
+					</p>
+					<p>
+						วาง API service คั่นระหว่าง client กับ CouchDB — client ไม่คุย CouchDB ตรง
+						proxy ตรวจ JWT/session, map เป็น permission, แล้ว forward เฉพาะที่อนุญาต
+						ใช้เมื่อต้องการ logic ที่ CouchDB native ทำไม่ได้ เช่น field-level, row-level
+						บน query, rate-limit, audit รวมศูนย์
+					</p>
+
+					<h3 id="p3-how">ทำงานยังไง</h3>
+					<div class="diagram">
+						<div class="bar">
+							<span>รูปที่ 4 — Proxy คั่นกลาง</span>
+							<button class="zoom-btn" data-zoom>🔍 ขยาย</button>
+						</div>
+						<div class="mermaid">
+sequenceDiagram
+    participant C as Client
+    participant P as Proxy API
+    participant DB as CouchDB
+    C->>P: GET /api/stock (JWT)
+    P->>P: verify JWT
+    P->>P: map user → permissions
+    alt มีสิทธิ์
+        P->>DB: query (admin creds)
+        DB-->>P: docs
+        P->>P: filter fields ที่ห้ามเห็น
+        P-->>C: 200 + docs ที่กรองแล้ว
+    else ไม่มีสิทธิ์
+        P-->>C: 403
+    end
+    Note over C,DB: client ไม่เห็น CouchDB เลย
+						</div>
+					</div>
+
+					<h3 id="p3-code">Code (sketch)</h3>
+					<pre><code>// FastAPI / Express style pseudo
+app.get('/api/stock', auth, async (req, res) => {
+  const user = req.user;                       // จาก JWT
+  if (!can(user, 'stock:read', req.query.branch))
+    return res.status(403).end();
+
+  const docs = await couch.query('stock', { branch: req.query.branch });
+
+  // field-level: ซ่อน cost ถ้าไม่ใช่ manager
+  const visible = docs.map(d =>
+    can(user, 'stock:cost', req.query.branch) ? d : omit(d, ['cost'])
+  );
+  res.json(visible);
+});</code></pre>
+					<div class="callout danger">
+						<strong>Trade-off ใหญ่:</strong> proxy คั่นกลาง = <strong>เสีย offline-first</strong>
+						client sync ตรงกับ CouchDB ไม่ได้แล้ว ถ้าต้องการทั้ง fine-grained auth
+						และ offline ต้องออกแบบ replication path แยก (เช่น proxy เฉพาะ sensitive ops,
+						sync ตรงสำหรับ data ทั่วไป)
+					</div>
+
+					<h3 id="p3-pc">ข้อดี / ข้อเสีย</h3>
+					<div class="proscons">
+						<div class="pros">
+							<h4>✅ ข้อดี</h4>
+							<ul>
+								<li>granularity ไม่จำกัด — field, row, computed</li>
+								<li>รวม business logic, audit, rate-limit ที่เดียว</li>
+								<li>ซ่อน CouchDB จาก client ทั้งหมด</li>
+							</ul>
+						</div>
+						<div class="cons">
+							<h4>❌ ข้อเสีย</h4>
+							<ul>
+								<li>เสีย offline-first sync ตรง</li>
+								<li>เพิ่ม service ที่ต้อง deploy/scale/ดูแล</li>
+								<li>เป็น single point of failure ถ้าไม่ HA</li>
+								<li>เขียน auth logic เองทั้งหมด = พื้นที่ bug</li>
+							</ul>
+						</div>
+					</div>
+					<div class="callout ok">
+						<strong>เหมาะกับ:</strong> ระบบที่ต้อง field-level / computed permission,
+						integrate หลาย backend, หรือ compliance ที่ต้อง audit ทุก access —
+						และ <em>ไม่</em> ต้องการ offline sync ตรง
+					</div>
+				</section>
+
+				<!-- ============ COMPARE ============ -->
+				<section id="compare">
+					<h2>ตารางเทียบรวม</h2>
+					<table>
+						<thead>
+							<tr>
+								<th></th>
+								<th>1 · DB-per-scope</th>
+								<th>2 · validate_doc</th>
+								<th>3 · Backend proxy</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr><td>enforce โดย</td><td>CouchDB native</td><td>CouchDB validate fn</td><td>Backend code</td></tr>
+							<tr><td>granularity</td><td>database</td><td>document (write)</td><td>ไม่จำกัด (field/row)</td></tr>
+							<tr><td>write security</td><td>✅ จริง</td><td>✅ จริง</td><td>✅ จริง</td></tr>
+							<tr><td>read security</td><td>✅ จริง</td><td>⚠ ต้องเสริม</td><td>✅ จริง</td></tr>
+							<tr><td>offline sync ตรง</td><td>✅ ได้</td><td>✅ ได้</td><td>❌ เสีย</td></tr>
+							<tr><td>setup</td><td>medium</td><td>complex</td><td>complex</td></tr>
+							<tr><td>จำนวน DB</td><td>เยอะ</td><td>น้อย</td><td>น้อย</td></tr>
+							<tr><td>cross-scope query</td><td>ยาก</td><td>ง่าย</td><td>ง่าย</td></tr>
+							<tr><td>extra infra</td><td>ไม่มี</td><td>ไม่มี</td><td>proxy service</td></tr>
+						</tbody>
+					</table>
+				</section>
+
+				<section id="mix">
+					<h2>ผสม pattern (ของจริงมักทำแบบนี้)</h2>
+					<p>
+						Pattern ไม่ผูกขาด — ระบบ production ส่วนมากผสม เลือกตามความอ่อนไหวของแต่ละ data
+					</p>
+					<div class="diagram">
+						<div class="bar">
+							<span>รูปที่ 5 — Hybrid ตัวอย่าง shelter system</span>
+							<button class="zoom-btn" data-zoom>🔍 ขยาย</button>
+						</div>
+						<div class="mermaid">
+flowchart TB
+    subgraph DIRECT["Sync ตรง (offline-first) — Pattern 1"]
+        S1[("shelter1_warehouse")]
+        S2[("shelter1_kitchen")]
+        S3[("shelter1_intake")]
+    end
+    subgraph PROXY["ผ่าน Proxy — Pattern 3 (sensitive)"]
+        PR["Proxy API"]
+        MED[("medical_records<br/>field-level")]
+        PR --> MED
+    end
+    DEV["📱 Device"] -->|role-scoped sync| DIRECT
+    DEV -->|REST + JWT| PR
+    classDef d fill:#134e4a,stroke:#5eead4,color:#e6e9ef;
+    classDef p fill:#3b3052,stroke:#c4b5fd,color:#e6e9ef;
+    class S1,S2,S3 d;
+    class PR,MED p;
+						</div>
+					</div>
+					<ul>
+						<li>data ทั่วไป (stock, kitchen, intake) → <strong>Pattern 1</strong> sync ตรง ทำงาน offline</li>
+						<li>data อ่อนไหว field-level (เวชระเบียน) → <strong>Pattern 3</strong> ผ่าน proxy เมื่อ online</li>
+						<li>shared log/catalog → <strong>Pattern 2</strong> ถ้าต้องการ DB รวม</li>
+					</ul>
+					<div class="callout">
+						<strong>หลักตัดสิน:</strong> เริ่มจาก Pattern 1 เป็น default (ง่าย + offline + native)
+						ยกขึ้น Pattern 2 เมื่อ "ต้อง DB รวม" ยกขึ้น Pattern 3 เฉพาะ data ที่
+						"ต้อง field-level หรือ logic ที่ CouchDB ทำไม่ได้" — อย่าใส่ proxy ทั้งระบบถ้าไม่จำเป็น เพราะแลกด้วย offline
+					</div>
+					<a class="crosslink" href="architecture.html">← กลับไปเอกสารสถาปัตยกรรมหลัก</a>
+				</section>
+			</main>
+		</div>
+
+		<div class="viewer" id="viewer">
+			<div class="viewer-bar">
+				<span class="title" id="viewerTitle">Diagram</span>
+				<div class="viewer-controls">
+					<button data-act="out" title="ซูมออก">−</button>
+					<button data-act="in" title="ซูมเข้า">+</button>
+					<button data-act="reset" title="รีเซ็ต">⤢</button>
+					<button data-act="close" title="ปิด">✕</button>
+				</div>
+			</div>
+			<div class="viewer-stage" id="stage">
+				<div id="stageInner"></div>
+			</div>
+			<div class="viewer-hint">เลื่อนล้อเมาส์ = ซูม · ลากเมาส์ = แพน · ดับเบิลคลิก = รีเซ็ต · Esc = ปิด</div>
+		</div>
+
+		<script type="module">
+			import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+			mermaid.initialize({
+				startOnLoad: true,
+				theme: 'dark',
+				themeVariables: {
+					background: '#171a23',
+					primaryColor: '#1e222d',
+					primaryTextColor: '#e6e9ef',
+					primaryBorderColor: '#2a2f3a',
+					lineColor: '#5eead4',
+					fontFamily: "'Noto Sans Thai', -apple-system, sans-serif"
+				},
+				flowchart: { curve: 'basis', htmlLabels: true },
+				securityLevel: 'loose'
+			});
+			await mermaid.run();
+
+			const viewer = document.getElementById('viewer');
+			const stage = document.getElementById('stage');
+			const inner = document.getElementById('stageInner');
+			const titleEl = document.getElementById('viewerTitle');
+			let scale = 1, tx = 0, ty = 0, dragging = false, sx = 0, sy = 0;
+
+			function apply() {
+				const svg = inner.querySelector('svg');
+				if (svg) svg.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
+			}
+			function reset() {
+				const svg = inner.querySelector('svg');
+				if (!svg) return;
+				const sb = stage.getBoundingClientRect();
+				const vb = svg.getBoundingClientRect();
+				const natW = svg.viewBox?.baseVal?.width || vb.width;
+				const natH = svg.viewBox?.baseVal?.height || vb.height;
+				const fit = Math.min((sb.width * 0.92) / natW, (sb.height * 0.92) / natH);
+				scale = fit > 0 && isFinite(fit) ? fit : 1;
+				tx = (sb.width - natW * scale) / 2;
+				ty = (sb.height - natH * scale) / 2;
+				apply();
+			}
+			function open(mermaidEl, title) {
+				const svg = mermaidEl.querySelector('svg');
+				if (!svg) return;
+				inner.innerHTML = '';
+				const clone = svg.cloneNode(true);
+				clone.removeAttribute('style');
+				clone.style.transformOrigin = '0 0';
+				inner.appendChild(clone);
+				titleEl.textContent = title || 'Diagram';
+				viewer.classList.add('open');
+				requestAnimationFrame(reset);
+			}
+			function close() { viewer.classList.remove('open'); }
+
+			document.querySelectorAll('[data-zoom]').forEach((btn) => {
+				btn.addEventListener('click', () => {
+					const card = btn.closest('.diagram');
+					open(card.querySelector('.mermaid'), card.querySelector('.bar span')?.textContent);
+				});
+			});
+			document.querySelectorAll('.diagram .mermaid').forEach((m) => {
+				m.addEventListener('click', () => {
+					const card = m.closest('.diagram');
+					open(m, card.querySelector('.bar span')?.textContent);
+				});
+			});
+
+			stage.addEventListener('wheel', (e) => {
+				e.preventDefault();
+				const rect = stage.getBoundingClientRect();
+				const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+				const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+				const ns = Math.min(Math.max(scale * factor, 0.1), 12);
+				tx = mx - (mx - tx) * (ns / scale);
+				ty = my - (my - ty) * (ns / scale);
+				scale = ns;
+				apply();
+			}, { passive: false });
+
+			stage.addEventListener('pointerdown', (e) => {
+				dragging = true; sx = e.clientX - tx; sy = e.clientY - ty;
+				stage.classList.add('grabbing'); stage.setPointerCapture(e.pointerId);
+			});
+			stage.addEventListener('pointermove', (e) => {
+				if (!dragging) return;
+				tx = e.clientX - sx; ty = e.clientY - sy; apply();
+			});
+			stage.addEventListener('pointerup', () => { dragging = false; stage.classList.remove('grabbing'); });
+			stage.addEventListener('dblclick', reset);
+
+			viewer.querySelectorAll('[data-act]').forEach((b) => {
+				b.addEventListener('click', () => {
+					const a = b.dataset.act;
+					if (a === 'close') return close();
+					if (a === 'reset') return reset();
+					const rect = stage.getBoundingClientRect();
+					const cx = rect.width / 2, cy = rect.height / 2;
+					const factor = a === 'in' ? 1.3 : 1 / 1.3;
+					const ns = Math.min(Math.max(scale * factor, 0.1), 12);
+					tx = cx - (cx - tx) * (ns / scale);
+					ty = cy - (cy - ty) * (ns / scale);
+					scale = ns; apply();
+				});
+			});
+			window.addEventListener('keydown', (e) => {
+				if (e.key === 'Escape' && viewer.classList.contains('open')) close();
+			});
+
+			const links = [...document.querySelectorAll('#toc a')];
+			const map = new Map(links.map((l) => [l.getAttribute('href').slice(1), l]));
+			const obs = new IntersectionObserver((entries) => {
+				entries.forEach((en) => {
+					if (en.isIntersecting) {
+						links.forEach((l) => l.classList.remove('active'));
+						map.get(en.target.id)?.classList.add('active');
+					}
+				});
+			}, { rootMargin: '-20% 0px -70% 0px' });
+			document.querySelectorAll('section[id]').forEach((s) => obs.observe(s));
+		</script>
+	</body>
+</html>

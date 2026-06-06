@@ -22,6 +22,14 @@
 		<div class="flex items-center gap-4">
 			<span class="text-muted-foreground text-sm">{authStore.user?.name}</span>
 			<Separator orientation="vertical" class="h-4" />
+			<a href={resolve('/demo')} class="text-sm hover:underline">RBAC Demo</a>
+			{#if authStore.user?.roles.includes('_admin')}
+				<Separator orientation="vertical" class="h-4" />
+				<a href={resolve('/admin/users')} class="text-sm hover:underline">Admin</a>
+				<Separator orientation="vertical" class="h-4" />
+				<a href={resolve('/admin/demo')} class="text-sm hover:underline">Demo Setup</a>
+			{/if}
+			<Separator orientation="vertical" class="h-4" />
 			<Button variant="outline" size="sm" onclick={logout}>Logout</Button>
 		</div>
 	</header>

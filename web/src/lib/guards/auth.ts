@@ -26,6 +26,17 @@ export async function requireAuth() {
 }
 
 /**
+ * Admin guard — requires an active `_admin` CouchDB session.
+ * Redirects to /home when authenticated but not admin.
+ */
+export async function requireAdmin() {
+	await requireAuth();
+	if (!authStore.user?.roles.includes('_admin')) {
+		throw redirect(302, resolve('/home'));
+	}
+}
+
+/**
  * Redirect away from auth pages (login) when a session already exists.
  *
  * @example
