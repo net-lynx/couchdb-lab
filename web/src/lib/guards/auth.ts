@@ -52,7 +52,9 @@ export async function redirectIfAuthenticated(redirectTo: '/notes' = '/notes') {
 
 	await authStore.ensureInitialized();
 
-	if (authStore.isAuthenticated) {
+	// Allow the login page through when the sync session has expired, so the
+	// user can re-authenticate even though a cached identity still exists.
+	if (authStore.isAuthenticated && !authStore.needsReauth) {
 		throw redirect(302, resolve(redirectTo));
 	}
 }
