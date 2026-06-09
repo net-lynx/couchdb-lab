@@ -9,9 +9,24 @@
 		DEMO_USERS,
 		testDbAccess,
 		testSharedWrite,
+		getLiveSession,
 		type DemoDb,
 		type AccessResult
 	} from '$lib/features/demo';
+
+	let liveSession = $state<{ name: string | null; roles: string[] } | null>(null);
+	let sessionLoading = $state(false);
+
+	async function refreshSession() {
+		sessionLoading = true;
+		try {
+			liveSession = await getLiveSession();
+		} catch (e) {
+			toast.error((e as Error).message);
+		} finally {
+			sessionLoading = false;
+		}
+	}
 
 	// access results keyed by db name
 	let results = $state<Partial<Record<DemoDb, AccessResult>>>({});
@@ -100,6 +115,37 @@
 						{/if}
 					{/each}
 				</div>
+			</div>
+
+			<div class="mt-4 border-t pt-4">
+				<p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Live CouchDB Session</p>
+				<Button size="sm" variant="outline" onclick={refreshSession} disabled={sessionLoading}>
+					{#if sessionLoading}
+						<span class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent mr-1.5"></span>
+					{/if}
+					Refresh from /_session
+				</Button>
+				{#if liveSession !== null}
+					<div class="mt-3 space-y-1.5 text-sm">
+						<p>name: <code class="rounded bg-muted px-1.5 py-0.5 text-xs">{liveSession.name}</code></p>
+						<div class="flex flex-wrap items-center gap-1">
+							<span>roles:</span>
+							{#if liveSession.roles.length > 0}
+								{#each liveSession.roles as role (role)}
+									<code class="rounded bg-muted px-1.5 py-0.5 text-xs">{role}</code>
+								{/each}
+							{:else}
+								<span class="text-muted-foreground text-xs">(no roles)</span>
+							{/if}
+						</div>
+						{#if JSON.stringify([...liveSession.roles].sort()) !== JSON.stringify([...userRoles].sort())}
+							<p class="mt-1 text-sm font-medium text-amber-400">
+								⚠ Roles differ from cached session — please re-login
+							</p>
+						{/if}
+					</div>
+				{/if}
+				<p class="mt-2 text-xs text-muted-foreground">หลัง setup ต้อง re-login เพื่อให้ session รับ roles ใหม่</p>
 			</div>
 		</Card.Content>
 	</Card.Root>

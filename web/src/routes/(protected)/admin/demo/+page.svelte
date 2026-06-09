@@ -5,14 +5,31 @@
 	import {
 		setupDemo,
 		teardownDemo,
+		verifySetup,
 		DEMO_USERS,
 		DB_META,
 		DEMO_DBS,
-		type SetupStep
+		type SetupStep,
+		type DbVerifyResult,
+		type UserVerifyResult
 	} from '$lib/features/demo';
+	import { resolve } from '$app/paths';
 
 	let steps = $state<SetupStep[]>([]);
 	let running = $state(false);
+	let verifyResult = $state<{ databases: DbVerifyResult[]; users: UserVerifyResult[] } | null>(null);
+	let verifying = $state(false);
+
+	async function runVerify() {
+		verifying = true;
+		try {
+			verifyResult = await verifySetup();
+		} catch (e) {
+			toast.error((e as Error).message);
+		} finally {
+			verifying = false;
+		}
+	}
 
 	async function runSetup() {
 		running = true;
@@ -60,6 +77,12 @@
 	<div class="mb-6 flex gap-3">
 		<Button onclick={runSetup} disabled={running}>Setup Demo</Button>
 		<Button variant="destructive" onclick={runTeardown} disabled={running}>Teardown</Button>
+		<Button variant="outline" onclick={runVerify} disabled={running || verifying}>
+			{#if verifying}
+				<span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-2"></span>
+			{/if}
+			Verify Setup
+		</Button>
 	</div>
 
 	<!-- Demo Users card -->
@@ -99,7 +122,7 @@
 				</table>
 			</div>
 			<div class="mt-4 border-t pt-4">
-				<a href="/demo" class="text-sm text-primary hover:underline">→ Go to Demo Page</a>
+				<a href={resolve('/demo')} class="text-sm text-primary hover:underline">→ Go to Demo Page</a>
 			</div>
 		</Card.Content>
 	</Card.Root>
@@ -156,5 +179,72 @@
 			></span>
 			Running…
 		</p>
+	{/if}
+
+	<!-- Verification Results card -->
+	{#if verifyResult !== null}
+		<Card.Root class="mb-6">
+			<Card.Header>
+				<Card.Title>Verification Results</Card.Title>
+			</Card.Header>
+			<Card.Content>
+				<!-- Databases -->
+				<p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Databases</p>
+				<ul class="mb-4 space-y-2 text-sm">
+					{#each verifyResult.databases as db (db.db)}
+						<li class="flex flex-col gap-0.5">
+							<div class="flex items-center gap-2">
+								<code class="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">{db.db}</code>
+								{#if db.exists}
+									<span class="text-green-400 font-medium">✓ exists</span>
+								{:else}
+									<span class="text-red-400 font-medium">✗ not found</span>
+									{#if db.error}
+										<span class="text-muted-foreground text-xs">— {db.error}</span>
+									{/if}
+								{/if}
+							</div>
+							{#if db.exists}
+								{@const roles = (db.security as any)?.members?.roles as string[] | undefined}
+								<div class="ml-4 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+									<span>members.roles:</span>
+									{#if roles && roles.length > 0}
+										{#each roles as role (role)}
+											<code class="rounded bg-muted px-1 py-0.5">{role}</code>
+										{/each}
+									{:else}
+										<span class="text-muted-foreground">(open to all authenticated)</span>
+									{/if}
+								</div>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+
+				<!-- Users -->
+				<p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Users</p>
+				<ul class="space-y-2 text-sm">
+					{#each verifyResult.users as user (user.name)}
+						<li class="flex flex-wrap items-center gap-2">
+							<code class="rounded bg-muted px-1.5 py-0.5 text-xs font-medium">{user.name}</code>
+							{#if user.roles !== null}
+								{#if (user.roles as string[]).length > 0}
+									{#each user.roles as role (role)}
+										<code class="rounded bg-muted px-1 py-0.5 text-xs">{role}</code>
+									{/each}
+								{:else}
+									<span class="text-muted-foreground text-xs">(no roles)</span>
+								{/if}
+							{:else}
+								<span class="text-red-400 font-medium">✗ not found</span>
+								{#if user.error}
+									<span class="text-muted-foreground text-xs">— {user.error}</span>
+								{/if}
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			</Card.Content>
+		</Card.Root>
 	{/if}
 </div>

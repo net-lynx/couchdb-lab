@@ -1,53 +1,15 @@
-import { PUBLIC_COUCHDB_URL } from '$env/static/public';
-import { COUCH_URL, couchFetch } from '$lib/db/couch';
-
-interface NotesSecurityDoc {
-	admins: { names: string[]; roles: string[] };
-	members: { names: string[]; roles: string[] };
-}
-
-function adminAuthHeader(): string {
-	const match = PUBLIC_COUCHDB_URL.match(/^https?:\/\/([^:]+):([^@]+)@/);
-	if (!match) return '';
-	return 'Basic ' + btoa(`${match[1]}:${match[2]}`);
-}
-
-export async function createCouchUser(name: string, password: string): Promise<void> {
-	await couchFetch(`/_users/org.couchdb.user:${encodeURIComponent(name)}`, {
-		method: 'PUT',
-		body: JSON.stringify({ name, password, roles: [], type: 'user' })
-	});
-}
-
-export async function grantNotesAccess(username: string): Promise<void> {
-	const auth = adminAuthHeader();
-
-	const secRes = await fetch(`${COUCH_URL}/notes/_security`, {
-		headers: { Authorization: auth, Accept: 'application/json' }
-	});
-	if (!secRes.ok) throw new Error('Failed to read notes security');
-
-	const security = (await secRes.json()) as NotesSecurityDoc;
-	security.members ??= { names: [], roles: [] };
-	security.members.names ??= [];
-
-	if (!security.members.names.includes(username)) {
-		security.members.names.push(username);
-	}
-
-	const putRes = await fetch(`${COUCH_URL}/notes/_security`, {
-		method: 'PUT',
-		headers: {
-			Authorization: auth,
-			'Content-Type': 'application/json',
-			Accept: 'application/json'
-		},
-		body: JSON.stringify(security)
-	});
-	if (!putRes.ok) throw new Error('Failed to update notes security');
-}
+// Self-signup runs on the server endpoint (/api/register), which holds the
+// admin credentials needed to create the CouchDB user and grant notes access.
+// The browser never sees the admin password.
 
 export async function registerUser(name: string, password: string): Promise<void> {
-	await createCouchUser(name, password);
-	await grantNotesAccess(name);
+	const res = await fetch('/api/register', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ username: name, password })
+	});
+	if (!res.ok) {
+		const data = (await res.json().catch(() => null)) as { message?: string } | null;
+		throw new Error(data?.message ?? `Registration failed (${res.status})`);
+	}
 }

@@ -1,10 +1,18 @@
-import { PUBLIC_COUCHDB_URL } from '$env/static/public';
+import { PUBLIC_COUCHDB_URL, PUBLIC_COUCH_PROXY } from '$env/static/public';
 
 /**
- * Base CouchDB URL with any embedded credentials (admin:password@) stripped.
- * The browser authenticates via the `_session` cookie, not URL credentials.
+ * Base URL for all cookie-authenticated CouchDB requests.
+ *
+ * When PUBLIC_COUCH_PROXY is set (e.g. "/couch"), the Vite dev-server proxy
+ * routes requests through the same origin, so the AuthSession cookie is
+ * treated as first-party and sent correctly by the browser.
+ *
+ * When empty (production / tests), falls back to PUBLIC_COUCHDB_URL — which
+ * carries NO credentials; a reverse-proxy (nginx etc.) must then handle CORS
+ * and cookie forwarding. Admin credentials live only in COUCHDB_ADMIN_URL
+ * (server-side, see $lib/server/couch-admin).
  */
-export const COUCH_URL = PUBLIC_COUCHDB_URL.replace(/^(https?:\/\/)[^@/]+@/, '$1');
+export const COUCH_URL = PUBLIC_COUCH_PROXY || PUBLIC_COUCHDB_URL;
 
 /** CouchDB user context, as returned by `GET /_session`. */
 export interface SessionUser {

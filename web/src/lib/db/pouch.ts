@@ -5,7 +5,14 @@ import { COUCH_URL } from './couch';
 let db: PouchDB.Database | null = null;
 let syncHandler: PouchDB.Replication.Sync<object> | null = null;
 
-const REMOTE_URL = `${COUCH_URL}/notes`;
+// PouchDB requires an absolute URL. When COUCH_URL is a proxy path ("/couch"),
+// resolve it against the current page origin at runtime.
+function buildRemoteUrl(path: string): string {
+	if (COUCH_URL.startsWith('/')) {
+		return `${window.location.origin}${COUCH_URL}${path}`;
+	}
+	return `${COUCH_URL}${path}`;
+}
 
 /** Fetch that forwards the CouchDB `_session` cookie on every remote request. */
 const cookieFetch: typeof fetch = (url, opts) => fetch(url, { ...opts, credentials: 'include' });
@@ -24,10 +31,8 @@ function getDb(): PouchDB.Database {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getRemoteDb(): PouchDB.Database {
-	// `fetch` is a valid runtime option for pouchdb-browser's HTTP adapter
-	// but absent from the type definitions — suppress the any warning here.
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	return new PouchDB(REMOTE_URL, { fetch: cookieFetch } as any);
+	return new PouchDB(buildRemoteUrl('/notes'), { fetch: cookieFetch } as any);
 }
 
 /**
