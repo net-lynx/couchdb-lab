@@ -53,6 +53,16 @@ else
   echo "    notes _security: unexpected status ${result}"
 fi
 
+echo "==> Configuring auth session lifetime..."
+# Default session timeout is 600s (10 min), forcing frequent re-logins.
+# Extend to 24h and refresh the cookie on each request (sliding window) so an
+# active user is never logged out mid-session.
+curl -sf -X PUT "${COUCH}/_node/_local/_config/couch_httpd_auth/timeout" \
+  -H "Content-Type: application/json" -d '"86400"'
+
+curl -sf -X PUT "${COUCH}/_node/_local/_config/couch_httpd_auth/allow_persistent_cookies" \
+  -H "Content-Type: application/json" -d '"true"'
+
 echo "==> Enabling CORS..."
 curl -sf -X PUT "${COUCH}/_node/_local/_config/httpd/enable_cors" \
   -H "Content-Type: application/json" -d '"true"'
