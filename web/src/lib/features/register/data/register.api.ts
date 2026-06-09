@@ -1,6 +1,6 @@
 // Self-signup runs on the server endpoint (/api/register), which holds the
-// admin credentials needed to create the CouchDB user and grant notes access.
-// The browser never sees the admin password.
+// admin credentials needed to create the CouchDB user. The browser never sees
+// the admin password.
 
 export async function registerUser(name: string, password: string): Promise<void> {
 	const res = await fetch('/api/register', {

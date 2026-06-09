@@ -35,7 +35,7 @@
 						password: form.data.password
 					});
 					reset();
-					await goto(resolve('/notes'));
+					await goto(resolve('/home'));
 				})(),
 				{
 					loading: 'Creating account...',

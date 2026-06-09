@@ -5,9 +5,12 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { toast } from 'svelte-sonner';
+	import ReauthModal from '$lib/features/login/ui/reauth-modal.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
+
+	let reauthOpen = $state(false);
 
 	async function logout() {
 		await authStore.logout();
@@ -22,14 +25,8 @@
 		<div class="flex items-center gap-4">
 			<span class="text-sm text-muted-foreground">{authStore.user?.name}</span>
 			<Separator orientation="vertical" class="h-4" />
-			<a href={resolve('/demo')} class="text-sm hover:underline">RBAC Demo</a>
-			<Separator orientation="vertical" class="h-4" />
 			<a href={resolve('/shelter')} class="text-sm hover:underline">Shelter</a>
 			{#if authStore.user?.roles.includes('_admin')}
-				<Separator orientation="vertical" class="h-4" />
-				<a href={resolve('/admin/users')} class="text-sm hover:underline">Admin</a>
-				<Separator orientation="vertical" class="h-4" />
-				<a href={resolve('/admin/demo')} class="text-sm hover:underline">Demo Setup</a>
 				<Separator orientation="vertical" class="h-4" />
 				<a href={resolve('/admin/shelter')} class="text-sm hover:underline">Shelter Setup</a>
 			{/if}
@@ -46,14 +43,16 @@
 			<span
 				>Your session expired — changes are saved locally but won't sync until you log in again.</span
 			>
-			<a
-				href={resolve('/login')}
+			<button
+				onclick={() => (reauthOpen = true)}
 				class="shrink-0 font-medium underline underline-offset-4 hover:text-amber-950"
 			>
 				Log in to sync
-			</a>
+			</button>
 		</div>
 	{/if}
+
+	<ReauthModal bind:open={reauthOpen} />
 
 	<main class="flex-1">
 		{@render children()}

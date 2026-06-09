@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import { getSession, sessionLogin, sessionLogout, type SessionUser } from '$lib/db/couch';
-import { startSync, stopSync } from '$lib/db/pouch';
+import { stopAllNamedSync } from '$lib/db/pouch';
 
 const STORAGE_KEY = 'auth:user';
 
@@ -34,9 +34,10 @@ function persistUser(user: SessionUser | null): void {
  *  - Identity is cached in localStorage. Normal local-only usage — and surviving
  *    a reload while offline — never requires a network round-trip, so the app
  *    keeps working when CouchDB is unreachable.
- *  - Sync is the only thing that requires a live session. When the cookie
- *    expires the live sync reports 401, we flag `needsReauth` and let the UI
- *    prompt for login instead of ejecting the user from the app.
+ *  - Sync is the only thing that requires a live session. Shelter sync is owned
+ *    by the routes that use it (see `startShelterSync`); when the cookie expires
+ *    a sync reports 401 and calls `markNeedsReauth`, so the UI prompts for login
+ *    instead of ejecting the user from the app.
  */
 class AuthStore {
 	private state = $state<{ user: SessionUser | null; needsReauth: boolean }>({
@@ -44,10 +45,6 @@ class AuthStore {
 		needsReauth: false
 	});
 	private initPromise: Promise<void> | null = null;
-
-	private onSyncAuthError = (): void => {
-		this.state.needsReauth = true;
-	};
 
 	/** Flag an expired sync session (e.g. from a feature-managed sync). */
 	markNeedsReauth(): void {
@@ -80,15 +77,11 @@ class AuthStore {
 					// Online + answered: CouchDB is the source of truth.
 					this.state.user = user;
 					persistUser(user);
-					if (user) {
-						this.state.needsReauth = false;
-						startSync(this.onSyncAuthError);
-					}
+					if (user) this.state.needsReauth = false;
 				})
 				.catch(() => {
 					// Offline / server unreachable — keep the cached identity so the
-					// user stays in the app. Sync retries automatically once online.
-					if (this.state.user) startSync(this.onSyncAuthError);
+					// user stays in the app. Per-route shelter sync retries once online.
 				});
 		}
 		return this.initPromise;
@@ -100,7 +93,6 @@ class AuthStore {
 		this.state.needsReauth = false;
 		persistUser(user);
 		this.initPromise = Promise.resolve();
-		if (browser) startSync(this.onSyncAuthError);
 		return user;
 	}
 
@@ -108,7 +100,7 @@ class AuthStore {
 		try {
 			await sessionLogout();
 		} finally {
-			if (browser) stopSync();
+			if (browser) stopAllNamedSync();
 			this.state.user = null;
 			this.state.needsReauth = false;
 			persistUser(null);

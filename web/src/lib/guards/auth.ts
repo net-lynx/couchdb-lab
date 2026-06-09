@@ -47,7 +47,7 @@ export async function requireAdmin() {
  *   return {};
  * };
  */
-export async function redirectIfAuthenticated(redirectTo: '/notes' = '/notes') {
+export async function redirectIfAuthenticated(redirectTo: '/home' = '/home') {
 	if (!browser) return;
 
 	await authStore.ensureInitialized();
